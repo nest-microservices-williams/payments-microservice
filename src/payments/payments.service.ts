@@ -37,7 +37,12 @@ export class PaymentsService {
         cancel_url: envs.stripe_cancel_url,
       });
 
-      return session;
+      return {
+        id: session.id,
+        cancelUrl: session.cancel_url,
+        successUrl: session.success_url,
+        url: session.url,
+      };
     } catch (error) {
       this.logger.error(error.message);
       throw new CustomRpcException({
