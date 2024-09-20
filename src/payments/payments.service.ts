@@ -1,14 +1,17 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import Stripe from 'stripe';
 import type { Request, Response } from 'express';
-import { envs } from 'src/config';
-import { PaymentSessionDto } from './dto/payment-session.dto';
+import type { ClientProxy } from '@nestjs/microservices';
 import { CustomRpcException } from 'src/common/exceptions/rpc.exception';
+import { envs, NATS_SERVICE } from 'src/config';
+import { PaymentSessionDto } from './dto/payment-session.dto';
 
 @Injectable()
 export class PaymentsService {
   private readonly stripe = new Stripe(envs.stripe_secret);
   private readonly logger = new Logger(PaymentsService.name);
+
+  constructor(@Inject(NATS_SERVICE) private readonly client: ClientProxy) {}
 
   async createPaymentSession(paymentSessionDto: PaymentSessionDto) {
     try {
@@ -70,9 +73,16 @@ export class PaymentsService {
 
     switch (event.type) {
       case 'charge.succeeded':
-        const { metadata } = event.data.object;
+        const { id, metadata, receipt_url } = event.data.object;
         const orderId = metadata.orderId;
-        console.log({ metadata, orderId });
+
+        const payload = {
+          stripePaymentId: id,
+          orderId,
+          receiptUrl: receipt_url,
+        };
+
+        this.client.emit('payment.succeeded', payload);
         break;
 
       default:
