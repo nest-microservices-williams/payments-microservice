@@ -1,40 +1,51 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import Stripe from 'stripe';
 import type { Request, Response } from 'express';
 import { envs } from 'src/config';
 import { PaymentSessionDto } from './dto/payment-session.dto';
+import { CustomRpcException } from 'src/common/exceptions/rpc.exception';
 
 @Injectable()
 export class PaymentsService {
   private readonly stripe = new Stripe(envs.stripe_secret);
+  private readonly logger = new Logger(PaymentsService.name);
 
   async createPaymentSession(paymentSessionDto: PaymentSessionDto) {
-    const { currency, items, orderId } = paymentSessionDto;
+    try {
+      const { currency, items, orderId } = paymentSessionDto;
 
-    const lineItems = items.map((item) => ({
-      price_data: {
-        currency,
-        product_data: {
-          name: item.name,
+      const lineItems = items.map((item) => ({
+        price_data: {
+          currency,
+          product_data: {
+            name: item.name,
+          },
+          unit_amount: Math.round(item.price * 100),
         },
-        unit_amount: Math.round(item.price * 100),
-      },
-      quantity: item.quantity,
-    }));
+        quantity: item.quantity,
+      }));
 
-    const session = await this.stripe.checkout.sessions.create({
-      mode: 'payment',
-      payment_intent_data: {
-        metadata: {
-          orderId,
+      const session = await this.stripe.checkout.sessions.create({
+        mode: 'payment',
+        payment_intent_data: {
+          metadata: {
+            orderId,
+          },
         },
-      },
-      line_items: lineItems,
-      success_url: envs.stripe_success_url,
-      cancel_url: envs.stripe_cancel_url,
-    });
+        line_items: lineItems,
+        success_url: envs.stripe_success_url,
+        cancel_url: envs.stripe_cancel_url,
+      });
 
-    return session;
+      return session;
+    } catch (error) {
+      this.logger.error(error.message);
+      throw new CustomRpcException({
+        statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+        error: 'Internal Server Error',
+        message: 'Error creating payment session',
+      });
+    }
   }
 
   async stripeWebhook(req: Request, res: Response) {
