@@ -7,6 +7,7 @@ interface EnvVars {
   STRIPE_WEBHOOK_SECRET: string;
   STRIPE_SUCCESS_URL: string;
   STRIPE_CANCEL_URL: string;
+  NATS_SERVERS: string[];
 }
 
 const envVarsSchema = joi.object<EnvVars>({
@@ -15,16 +16,23 @@ const envVarsSchema = joi.object<EnvVars>({
   STRIPE_WEBHOOK_SECRET: joi.string().required(),
   STRIPE_SUCCESS_URL: joi.string().uri().required(),
   STRIPE_CANCEL_URL: joi.string().uri().required(),
+  NATS_SERVERS: joi.array().items(joi.string()).required(),
 });
 
 function validateEnv<T>(
   schema: joi.ObjectSchema<T>,
   env: NodeJS.ProcessEnv = process.env,
 ): T {
-  const { value, error } = schema.validate(env, {
-    allowUnknown: true,
-    convert: true,
-  });
+  const { value, error } = schema.validate(
+    {
+      ...env,
+      NATS_SERVERS: env.NATS_SERVERS?.split(','),
+    },
+    {
+      allowUnknown: true,
+      convert: true,
+    },
+  );
 
   if (error) {
     throw new Error(`Config validation error: ${error.message}`);
@@ -45,4 +53,5 @@ export const envs: LowerCaseKeys<EnvVars> = {
   stripe_webhook_secret: validatedEnv.STRIPE_WEBHOOK_SECRET,
   stripe_success_url: validatedEnv.STRIPE_SUCCESS_URL,
   stripe_cancel_url: validatedEnv.STRIPE_CANCEL_URL,
+  nats_servers: validatedEnv.NATS_SERVERS,
 };
